@@ -1,11 +1,10 @@
 // (c) Michael Schoeffler 2017, http://www.mschoeffler.de
 #include <Arduino.h>
 #include "Wire.h" // This library allows you to communicate with I2C devices.
-//#include "sensor_readings.h"
+
 #include "TFT_eSPI.h"     // ESP32 Hardware-specific library
-//#include "settings.h"    // The order is important!
-// bme is global to this file only
-//Adafruit_BME280 bme;
+
+
 
 TFT_eSPI tft = TFT_eSPI();
 
@@ -33,7 +32,6 @@ void setup() {
   Wire.write(0); // set to zero (wakes up the MPU-6050)
   Wire.endTransmission(true);
 
-  //digitalWrite(15, HIGH);
   tft.begin();
 
   tft.setRotation(3);
@@ -78,9 +76,6 @@ void loop() {
   tft.setCursor(50, 50);
 
   tft.println(millis());
-  //refresh_readings(&bme, &tft);  
-  //bg = TFT_BLACK;
-  //fg = TFT_WHITE;
 
   tft.setCursor(5, 5);
   tft.setTextColor(fg, bg);
@@ -113,12 +108,5 @@ void loop() {
   tft.print(convert_int16_to_str(gyro_z));
   tft.println();
 
-  // tft.fillRect(5, 170, 200, 30, bg);
-  // tft.setCursor(5, 170);
-  // tft.print("Accelerometer z: ");
-  // tft.print(convert_int16_to_str(accelerometer_z)); 
-  // tft.println(" mm");
-  //delay(2000);
-  // delay
   delay(2000);
 }
