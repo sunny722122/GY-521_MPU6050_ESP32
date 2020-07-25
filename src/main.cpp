@@ -120,6 +120,12 @@ struct Button {
     }
 };
 
+// Global Variables
+Led    onboard_led = { LED_ONBOARD_PIN, false };
+Led    led1        = { LED1_PIN, false };
+Button button1      = { BTN1_PIN, HIGH, 0, 0 };
+Led    led2        = { LED2_PIN, false };
+Button button2      = { BTN2_PIN, HIGH, 0, 0 };
 // ----------------------------------------------------------------------------
 // SPIFFS initialization
 // ----------------------------------------------------------------------------
@@ -149,7 +155,7 @@ void initWiFi() {
 }
 
 String processor(const String &var) {
-    return String(var == "STATE" && led.on ? "on" : "off");
+    return String(var == "STATE" && led1.on ? "on" : "off");
 }
 
 void onRootRequest(AsyncWebServerRequest *request) {
@@ -163,12 +169,7 @@ void initWebServer() {
 }
 
 //https://m1cr0lab-esp32.github.io/remote-control-with-websocket/button-setup/
-// Global Variables
-Led    onboard_led = { LED_ONBOARD_PIN, false };
-Led    led1        = { LED1_PIN, false };
-Button button1      = { BTN1_PIN, HIGH, 0, 0 };
-Led    led2        = { LED2_PIN, false };
-Button button2      = { BTN2_PIN, HIGH, 0, 0 };
+
 
 AsyncWebServer server(HTTP_PORT);
 
