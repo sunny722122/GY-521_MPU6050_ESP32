@@ -3,6 +3,7 @@
 #include "Wire.h" // This library allows you to communicate with I2C devices.
 
 #include "TFT_eSPI.h"     // ESP32 Hardware-specific library
+#include "WiFi.h"
 
 #define PHOTOS_pin 36
 //#define led1_pin 25
@@ -16,6 +17,9 @@
 #define LED2_PIN   26
 #define BTN2_PIN   17
 
+// WiFi credentials
+const char *WIFI_SSID = "TELUS1005";
+const char *WIFI_PASS = "nfnb33pgv2";
 
 TFT_eSPI tft = TFT_eSPI();
 
