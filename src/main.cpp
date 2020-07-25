@@ -4,6 +4,7 @@
 
 #include "TFT_eSPI.h"     // ESP32 Hardware-specific library
 #include "WiFi.h"
+#include <ESPAsyncWebServer.h>
 
 #define PHOTOS_pin 36
 //#define led1_pin 25
@@ -16,6 +17,7 @@
 #define BTN1_PIN   16
 #define LED2_PIN   26
 #define BTN2_PIN   17
+#define HTTP_PORT 80
 
 // WiFi credentials
 const char *WIFI_SSID = "TELUS1005";
@@ -118,6 +120,48 @@ struct Button {
     }
 };
 
+// ----------------------------------------------------------------------------
+// SPIFFS initialization
+// ----------------------------------------------------------------------------
+
+void initSPIFFS() {
+  if (!SPIFFS.begin()) {
+    Serial.println("Cannot mount SPIFFS volume...");
+    while (1) {
+        onboard_led.on = millis() % 200 < 50;
+        onboard_led.update();
+    }
+  }
+}
+// ----------------------------------------------------------------------------
+// Connecting to the WiFi network
+// ----------------------------------------------------------------------------
+
+void initWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.printf("Trying to connect [%s] ", WiFi.macAddress().c_str());
+  while (WiFi.status() != WL_CONNECTED) {
+      Serial.print(".");
+      delay(500);
+  }
+  Serial.printf(" %s\n", WiFi.localIP().toString().c_str());
+}
+
+String processor(const String &var) {
+    return String(var == "STATE" && led.on ? "on" : "off");
+}
+
+void onRootRequest(AsyncWebServerRequest *request) {
+  request->send(SPIFFS, "/index.html", "text/html", false, processor);
+}
+
+void initWebServer() {
+    server.on("/", onRootRequest);
+    server.serveStatic("/", SPIFFS, "/");
+    server.begin();
+}
+
 //https://m1cr0lab-esp32.github.io/remote-control-with-websocket/button-setup/
 // Global Variables
 Led    onboard_led = { LED_ONBOARD_PIN, false };
@@ -125,6 +169,8 @@ Led    led1        = { LED1_PIN, false };
 Button button1      = { BTN1_PIN, HIGH, 0, 0 };
 Led    led2        = { LED2_PIN, false };
 Button button2      = { BTN2_PIN, HIGH, 0, 0 };
+
+AsyncWebServer server(HTTP_PORT);
 
 void setup() {
   Serial.begin(9600);
@@ -156,6 +202,10 @@ void setup() {
   pinMode(TMP36_pin,INPUT);
   pinMode(Poten_pin,INPUT);
   pinMode(Piezo_pin,OUTPUT);
+
+  initSPIFFS();
+  initWiFi();
+  initWebServer();
 }
 void loop() {
   Wire.beginTransmission(MPU_ADDR);
