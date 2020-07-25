@@ -172,17 +172,17 @@ void loop() {
   vtmp36=analogRead(TMP36_pin);
   valuep=analogRead(Poten_pin);
   dacWrite(led1.pin,valuep);
-  // button1.read();
-  // if (button1.pressed()) {
-  //     led1.on = !led1.on;
-  // }
-  // button2.read();
+  button1.read();
+  if (button1.pressed()) {
+      ;//led1.on = !led1.on;
+  }
+  button2.read();
   // if (button2.held())     led2.on = true;
   // else if (button2.released()) led2.on = false;
   // led1.update();
   // led2.update();
-  // onboard_led.on = millis() % 1000 < 500;
-  // onboard_led.update();
+  onboard_led.on = millis() % 1000 < 500;
+  onboard_led.update();
   // print out data
   Serial.print("aX = "); Serial.print(convert_int16_to_str(accelerometer_x));
   Serial.print(" | aY = "); Serial.print(convert_int16_to_str(accelerometer_y));
