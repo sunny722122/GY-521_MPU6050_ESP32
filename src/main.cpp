@@ -4,7 +4,10 @@
 
 #include "TFT_eSPI.h"     // ESP32 Hardware-specific library
 #include "WiFi.h"
-#include <ESPAsyncWebServer.h>
+//#include <ESPAsyncWebServer.h>
+#include <WebServer.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 #define PHOTOS_pin 36
 //#define led1_pin 25
@@ -19,6 +22,7 @@
 #define BTN2_PIN   17
 #define HTTP_PORT 80
 
+#define SEALEVELPRESSURE_HPA (1013.25)
 // WiFi credentials
 const char *WIFI_SSID = "TELUS1005";
 const char *WIFI_PASS = "nfnb33pgv2";
@@ -27,12 +31,6 @@ TFT_eSPI tft = TFT_eSPI();
 
 uint16_t bg = TFT_BLUE;
 uint16_t fg = TFT_WHITE ;
-
-const int MPU_ADDR = 0x68; // I2C address of the MPU-6050. If AD0 pin is set to HIGH, the I2C address will be 0x69.
-
-int16_t accelerometer_x, accelerometer_y, accelerometer_z; // variables for accelerometer raw data
-int16_t gyro_x, gyro_y, gyro_z; // variables for gyro raw data
-int16_t temperature; // variables for temperature data
 
 char tmp_str[7]; // temporary variable used in convert function
 
@@ -49,6 +47,15 @@ int length = 15; // the number of notes
 char notes[] = "ccggaagffeeddc "; // a space represents a rest
 int beats[] = { 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 4 };
 int tempo = 300;
+
+Adafruit_BME280 bme;
+
+float temperature, humidity, pressure, altitude;
+WebServer server(80);   
+void handle_OnConnect();  
+void handle_NotFound();  
+String SendHTML(float temperature,float humidity,float pressure,float altitude);      
+ 
 
 void playTone(int tone, int duration) {
   for (long i = 0; i < duration * 1000L; i += tone * 2) {
@@ -144,42 +151,33 @@ void initSPIFFS() {
 // ----------------------------------------------------------------------------
 
 void initWiFi() {
-  WiFi.mode(WIFI_STA);
+  //connect to your local wi-fi network
   WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.printf("Trying to connect [%s] ", WiFi.macAddress().c_str());
+
+  //check wi-fi is connected to wi-fi network
   while (WiFi.status() != WL_CONNECTED) {
-      Serial.print(".");
-      delay(500);
+  delay(1000);
+  Serial.print(".");
   }
-  Serial.printf(" %s\n", WiFi.localIP().toString().c_str());
+  Serial.println("");
+  Serial.println("WiFi connected..!");
+  Serial.print("Got IP: ");  Serial.println(WiFi.localIP());
+
+  server.on("/", handle_OnConnect);
+  server.onNotFound(handle_NotFound);
+
+  server.begin();
+  Serial.println("HTTP server started");
 }
 
 String processor(const String &var) {
     return String(var == "STATE" && led1.on ? "on" : "off");
 }
 
-void onRootRequest(AsyncWebServerRequest *request) {
-  request->send(SPIFFS, "/index.html", "text/html", false, processor);
-}
-
-void initWebServer() {
-    server.on("/", onRootRequest);
-    server.serveStatic("/", SPIFFS, "/");
-    server.begin();
-}
-
 //https://m1cr0lab-esp32.github.io/remote-control-with-websocket/button-setup/
-
-
-AsyncWebServer server(HTTP_PORT);
 
 void setup() {
   Serial.begin(9600);
-  Wire.begin();
-  Wire.beginTransmission(MPU_ADDR); // Begins a transmission to the I2C slave (GY-521 board)
-  Wire.write(0x6B); // PWR_MGMT_1 register
-  Wire.write(0); // set to zero (wakes up the MPU-6050)
-  Wire.endTransmission(true);
 
   tft.begin();
 
@@ -203,50 +201,27 @@ void setup() {
   pinMode(TMP36_pin,INPUT);
   pinMode(Poten_pin,INPUT);
   pinMode(Piezo_pin,OUTPUT);
-
-  initSPIFFS();
+  bme.begin(0x76); 
+  //initSPIFFS();
   initWiFi();
-  initWebServer();
+
+  
 }
 void loop() {
-  Wire.beginTransmission(MPU_ADDR);
-  Wire.write(0x3B); // starting with register 0x3B (ACCEL_XOUT_H) [MPU-6000 and MPU-6050 Register Map and Descriptions Revision 4.2, p.40]
-  Wire.endTransmission(false); // the parameter indicates that the Arduino will send a restart. As a result, the connection is kept active.
-  Wire.requestFrom(MPU_ADDR, 7*2, true); // request a total of 7*2=14 registers
-  
-  // "Wire.read()<<8 | Wire.read();" means two registers are read and stored in the same variable
-  accelerometer_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
-  accelerometer_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
-  accelerometer_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
-  temperature = Wire.read()<<8 | Wire.read(); // reading registers: 0x41 (TEMP_OUT_H) and 0x42 (TEMP_OUT_L)
-  gyro_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x43 (GYRO_XOUT_H) and 0x44 (GYRO_XOUT_L)
-  gyro_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x45 (GYRO_YOUT_H) and 0x46 (GYRO_YOUT_L)
-  gyro_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
-  
+  server.handleClient();
+  handle_OnConnect();
+
+
   value=analogRead(PHOTOS_pin);
   vtmp36=analogRead(TMP36_pin);
   valuep=analogRead(Poten_pin);
   dacWrite(led1.pin,valuep);
-  button1.read();
-  if (button1.pressed()) {
-      ;//led1.on = !led1.on;
-  }
-  button2.read();
-  // if (button2.held())     led2.on = true;
-  // else if (button2.released()) led2.on = false;
-  // led1.update();
-  // led2.update();
-  //onboard_led.on = millis() % 1000 < 500;
-  //onboard_led.update();
-  // print out data
-  Serial.print("aX = "); Serial.print(convert_int16_to_str(accelerometer_x));
-  Serial.print(" | aY = "); Serial.print(convert_int16_to_str(accelerometer_y));
-  Serial.print(" | aZ = "); Serial.print(convert_int16_to_str(accelerometer_z));
-  // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
-  Serial.print(" | tmp = "); Serial.print(temperature/340.00+36.53);
-  Serial.print(" | gX = "); Serial.print(convert_int16_to_str(gyro_x));
-  Serial.print(" | gY = "); Serial.print(convert_int16_to_str(gyro_y));
-  Serial.print(" | gZ = "); Serial.print(convert_int16_to_str(gyro_z));
+  
+  Serial.print("tmp = "); 
+  Serial.print(temperature);
+  Serial.print(" | Humidity = "); Serial.print(humidity);
+  Serial.print(" | pressure = "); Serial.print(pressure);
+  Serial.print(" | altitude = "); Serial.print(altitude);
   Serial.println();
   
   tft.setCursor(50, 50);
@@ -266,22 +241,14 @@ void loop() {
 
   tft.fillRect(5, 90, 200, 30, bg);
   tft.setCursor(5, 90);
-  tft.print("ax= ");
-  tft.print(convert_int16_to_str(accelerometer_x));
-  tft.print("| ay= ");
-  tft.print(convert_int16_to_str(accelerometer_y));
-  tft.print("| az= ");
-  tft.print(convert_int16_to_str(accelerometer_z));
-  tft.println();
-
-  tft.fillRect(5, 130, 200, 30, bg);
-  tft.setCursor(5, 130);
-  tft.print("gx= ");
-  tft.print(convert_int16_to_str(gyro_x));
-  tft.print("| gy= ");
-  tft.print(convert_int16_to_str(gyro_y));
-  tft.print("| gz= ");
-  tft.print(convert_int16_to_str(gyro_z));
+  tft.print("Temp= ");
+  tft.print(temperature);
+  tft.print("| Humidity= ");
+  tft.print(humidity);
+  tft.print("| Pressure= ");
+  tft.print(pressure);
+  tft.print("| Altitude= ");
+  tft.print(altitude);
   tft.println();
 
   tft.fillRect(5, 170, 200, 30, bg);
@@ -307,4 +274,47 @@ void loop() {
   }
 
   delay(2000);
+}
+
+
+void handle_OnConnect() {
+  temperature = bme.readTemperature();
+  humidity = bme.readHumidity();
+  pressure = bme.readPressure() / 100.0F;
+  altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+  server.send(200, "text/html", SendHTML(temperature,humidity,pressure,altitude)); 
+}
+
+void handle_NotFound(){
+  server.send(404, "text/plain", "Not found");
+}
+
+String SendHTML(float temperature,float humidity,float pressure,float altitude){
+  String ptr = "<!DOCTYPE html> <html>\n";
+  ptr +="<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">\n";
+  ptr +="<title>ESP32 Weather Station</title>\n";
+  ptr +="<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}\n";
+  ptr +="body{margin-top: 50px;} h1 {color: #444444;margin: 50px auto 30px;}\n";
+  ptr +="p {font-size: 24px;color: #444444;margin-bottom: 10px;}\n";
+  ptr +="</style>\n";
+  ptr +="</head>\n";
+  ptr +="<body>\n";
+  ptr +="<div id=\"webpage\">\n";
+  ptr +="<h1>ESP32 Weather Station</h1>\n";
+  ptr +="<p>Temperature: ";
+  ptr +=temperature;
+  ptr +="&deg;C</p>";
+  ptr +="<p>Humidity: ";
+  ptr +=humidity;
+  ptr +="%</p>";
+  ptr +="<p>Pressure: ";
+  ptr +=pressure;
+  ptr +="hPa</p>";
+  ptr +="<p>Altitude: ";
+  ptr +=altitude;
+  ptr +="m</p>";
+  ptr +="</div>\n";
+  ptr +="</body>\n";
+  ptr +="</html>\n";
+  return ptr;
 }
